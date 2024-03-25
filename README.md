@@ -24,3 +24,6 @@ In `config.py`:
 ### Structure
 `fzfbookmarks-userscript` run a termminal window (I recommand to make it floating for example in your window manager rules), running the command `qute-plugin-fzfbookmarks` which displays the content of `$QUTE_CONFIG_DIR/bookmarks/bookmarks`
 
+## Demo
+
+![](https://github.com/Twix53791/qute-plugin-fzfbookmarks/blob/main/demo.gif)
