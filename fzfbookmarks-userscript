@@ -1,0 +1,45 @@
+#!/bin/bash
+# Run qutebrowser/bin/qute-plugin-fzfbookmarks
+#
+# Add bin folder to PATH in .bashrc or .zshrc, or here:
+# export PATH="$HOME/.config/qutebrowser/bin:$PATH"
+
+# bmrkfile has to be the same than into qute-plugin-fzfbookmark
+bmrkfile="$QUTE_CONFIG_DIR/bookmarks/bookmarks"
+selectfile="/tmp/qute-plugins/qute-plugin-fzfbookmarks-selection"
+[[ -s $selectfile ]] && echo -n "" > $selectfile
+
+mode="$1"; shift
+
+# Exit if the url already bookmarked
+_exit_error (){
+   if grep -q "$QUTE_URL\$" "$bmrkfile"; then
+      qutebrowser ":message-error 'Bookmark already exist'"
+      exit
+   fi
+}
+
+term="kitty"
+windowname="qute-plugin-fzfbookmarks"
+font="Iosevka Term Extended"
+termoptions=('-o' 'background_opacity=0.9')
+
+# Run the pop-up window
+if [[ $mode == "add" ]]; then
+   _exit_error
+   $term --name "$windowname" -o font_family="$font" "${termoptions[@]}" -e qute-plugin-fzfbookmarks "$selectfile" "add" "$QUTE_URL"
+
+elif [[ $mode == "quickadd" ]]; then
+   _exit_error
+   qute-plugin-fzfbookmarks "$selectfile" "quickadd" "$QUTE_URL" "$@"
+
+else
+   $term --name "$windowname" -o font_family="$font" "${termoptions[@]}" -e qute-plugin-fzfbookmarks "$selectfile" "list"
+fi
+
+# Qutebrowser will open the urls passed to QUTE_FIFO
+if [[ $mode == "list" && -s $selectfile ]]; then
+   while read url; do
+      echo "open -tr $url" >> "$QUTE_FIFO"
+   done < $selectfile
+fi

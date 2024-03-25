@@ -1,0 +1,262 @@
+#!/bin/bash
+# MADE by Twix. https://github.com/Twix53791
+#==================================================
+# Launched by qutebrowser/userscripts/bookmarks-fzf
+#
+# Format:
+#  $1 output file (selection)
+#  $2 option
+#  $3 url (optionnal, for add and quickadd)
+#  $4 bookmark name (optionnal, for quickadd)
+#
+# Options:
+#   add         add a bookmark with the fzf menu
+#   quickadd    add a bookmark from the qutebrowser command line
+#   list        main function, list bookmarks with fzf
+#
+# Boomarks syntax
+#    MainCategory --Subcat1 --Subcat2 -- Name -- url
+# Without cat:
+#    -- Name -- url
+#
+# NOTE: urls must be unique. It is not possible to
+#       add twice the same exact url.
+#
+# DEPENDENCIES
+#     fzf
+#==================================================
+
+bmrkfile="$QUTE_CONFIG_DIR/bookmarks/bookmarks"
+tmpfile="/tmp/qute-plugins/qute-plugin-fzfbookmarks-tmp"
+savefile="/tmp/qute-plugins/qute-plugin-fzfbookmarks-bookmarks-save"
+
+# Display format
+sep="--"
+c1="\e[36m" # category color
+c2="\e[95m"
+c3="\e[92m"
+c4="\e[94m"
+c5="\e[34m" # preview text
+
+# Open an fzf menu to select the category and add bookmark
+_add_bookmark (){
+    if [[ -z $url ]]; then
+        qutebrowser ":message-error 'fzf-bookmarks error: missing url'"
+        exit
+    fi
+
+    # Run a fzf menu of the categories
+    _set_fzf "add"
+    output=$(_get_categories | sort -u | fzf)
+    [[ -z $output ]] && exit
+
+    query=$(head -1 <<< $output)
+    catselect=$(tail -n +2 <<< $output)
+
+    if [[ $query == ":nocat" ]]; then
+        nocat=1
+        query=$(tail -n +2 <<< $output | head -1)
+        catselect=$(tail -n +3 <<< $output)
+    fi
+
+    if [[ $nocat != 1 && -n $catselect ]]; then
+        query=$(_list_bookmarks | sort | fzf -e -q "$catselect" | head -1)
+        name=$(_typos "$query")
+
+    elif [[ ${query##*$sep} == *[!\ ]* ]]; then
+        name=$(_typos "$query")
+
+    else
+        qutebrowser ":message-error 'Syntax error. No bookmark created'"
+    fi
+
+    [[ -z $name ]] && exit
+
+    if ! grep -q "$name" "$bmrkfile"; then
+        echo "$name $sep $url" >> "$bmrkfile"
+        qutebrowser ":message-info 'Bookmark created : $name'"
+    else
+        qutebrowser ":message-error 'Bookmark already exist'"
+    fi
+}
+
+_quickadd (){
+    if [[ -z $url ]]; then
+        qutebrowser ":message-error 'fzf-bookmarks error: missing url'"
+        exit
+    fi
+
+    input=$(tr -d \\n <<< $@)
+
+    # If no bookmark name specified, name it from the domain name
+    if [[ -z $input ]]; then
+        name="${url#*//}"
+        name="${name%%/*}"
+    else
+        name=$(_typos "$input")
+    fi
+
+    if ! grep -q "$name" "$bmrkfile"; then
+        echo "$name $sep $url" >> "$bmrkfile"
+        qutebrowser ":message-info 'Bookmark created : $name'"
+    else
+        qutebrowser ":message-error 'Bookmark already exist'"
+    fi
+}
+
+_main (){
+    selectfile="$1" ; opt=$2 ; url="$3" ; shift 3
+    if [[ -z $selectfile ]]; then
+        qutebrowser ":message-error 'fzf-bookmarks error: missing selectfile'"
+        exit
+    fi
+
+    if [[ $opt == "add" ]]; then
+        _add_bookmark
+
+    elif [[ $opt == "quickadd" ]]; then
+        _quickadd "$@"
+
+    else # list bookmarks
+        _set_fzf "list"
+        output=$(_list_bookmarks | sort | fzf)
+
+        action=$(head -1 <<< $output)
+        [[ ${action:0:1} == ":" ]] && output=$(tail -n +2 <<< $output)
+        [[ -z $output ]] && exit
+
+        if [[ $action == ":delete" ]]; then
+            _delete
+            _main "$selectfile" "$opt" "$url"
+
+        elif [[ $action == ":rename" ]]; then
+            [[ -n $EDITOR ]] && editor="$EDITOR" || editor=nano
+            rfile="$tmpfile-rename"
+
+            # Edit all the entries selected in nano
+            echo "$output" > "$rfile"
+            nano "$rfile"
+
+            # Delete all the entries selected (avoids duplicates)
+            _delete
+
+            # Add the renamed entries to $bmrkfile
+            cat "$rfile" >> "$bmrkfile"
+
+            # Loop to main menu
+            _main "$selectfile" "$opt" "$url"
+
+        else
+            while read line; do
+                url="${line##*$sep }"
+                echo "$url" >> "$selectfile"
+            done <<< $output
+        fi
+    fi
+}
+
+# Delete the entries.
+# Match the lines ending by the urls selected
+_delete (){
+    dlist=""
+    while read line; do
+        dlist+="\|${line##*$sep}\$"
+    done <<< $output
+
+    # Save deleted bookmarks in /tmp/$savefile
+    grep "${dlist:2}" "$bmrkfile" > "$savefile"
+
+    # Delete
+    grep -v "${dlist:2}" "$bmrkfile" > $tmpfile
+    cp "$tmpfile" "$bmrkfile"
+}
+
+# Parse the $bmrkfile
+_list_bookmarks (){
+    while read line; do
+        if [[ -n $line ]]; then
+            url="${line##*$sep}" # get url
+            nme="${line%$sep*}"
+            ctg="${nme%$sep*}"   # get categories
+            nme="${nme##*$sep}"  # get name
+
+        if [[ $ctg == *"$sep"* ]]; then
+            ctg1="${ctg%%$sep*}"
+            ctg2="$sep${ctg#*$sep}" # get subcat
+        else
+            ctg1="$ctg"
+            ctg2=""
+        fi
+
+        echo -e "$c1$ctg1$c2$ctg2$c3$sep$nme$c4$sep$url"
+        fi
+    done < $bmrkfile
+}
+
+_get_categories (){
+    while read line; do
+        # Remove the two last fields (name & url)
+        ctg="${line%$sep*}"
+        ctg="${ctg%$sep*}"
+
+        if [[ -n $ctg ]]; then
+            echo -e "$c1$ctg$sep "
+        fi
+    done < $bmrkfile
+}
+
+# Corrects typos
+_typos (){
+    str="$1"
+    [[ -z $str ]] && return
+
+    # No '- -'
+    while [[ $str == *"- -"* ]]; do
+        str=$(sed 's/- -/-/g' <<< $str)
+    done
+
+    # No more than two - (--)
+    str=$(sed 's/-\{2,\}/--/g' <<< $str)
+
+    # spaces before any '[^- ]--' or '[^- ]- '
+    str=$(sed 's/\([^- ]\)--/\1 --/g; s/\([^- ]\)- /\1 - /g' <<< $str)
+
+    # spaces after any '--[^ ]' or ' -[^- ]'
+    str=$(sed 's/--\([^- ]\)/-- \1/g; s/ -\([^- ]\)/ - \1/g' <<< $str)
+
+    # ' - ' are changed in ' -- '
+    str=$(sed 's/ - / -- /' <<< $str)
+
+    # If no separator, create a 'default cat' bookmark
+    [[ $str != *--* ]] && str="-- $str" && str=$(sed 's/- -/- /' <<< $str)
+
+    echo "$str"
+}
+
+_set_fzf (){
+    if [[ $1 == "add" ]]; then
+        h1="$c2  Syntax: MainCategory -- Subcat1 -- Subcat2 -- Name -- url\\n"
+        h2="$c2  No category: -- Name\\n"
+        h3="$c5  alt-enter: name the bookmark from the query (ignoring any category selected)"
+        help="\\n$h1$h2$h3"
+
+        export FZF_DEFAULT_OPTS="--reverse +m --ansi --print-query \
+                                 --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
+                                 --bind 'alt-b:abort' \
+                                 --bind 'alt-enter:execute(echo :nocat)+accept' \
+                                 --preview='echo -e \"$help\"' \
+                                 --preview-window='bottom,16%,border-none,wrap'"
+    else
+        help="\\n$c5  ctrl-r: rename bookmark  ;  ctrl-d: delete bookmark"
+
+        export FZF_DEFAULT_OPTS="--reverse -m --ansi\
+            --bind 'change:first,right:toggle+down,left:deselect-all,alt-q:abort' \
+            --bind 'alt-b:abort' \
+            --bind 'ctrl-d:execute(echo :delete)+accept' \
+            --bind 'ctrl-r:execute(echo :rename)+accept' \
+            --preview='echo -e \"$help\"' \
+            --preview-window='bottom,12%,border-none,wrap'"
+    fi
+}
+
+_main "$@"
