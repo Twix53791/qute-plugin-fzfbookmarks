@@ -130,7 +130,8 @@ _main (){
             _main "$selectfile" "$opt" "$url"
 
         elif [[ $action == ":rename" ]]; then
-            [[ -n $EDITOR ]] && editor="$EDITOR" || editor=nano
+            [[ -n $EDITOR ]] && editor="$EDITOR" || editor="nano"
+
             rfile="$tmpfile-rename"
 
             # Edit all the entries selected in nano

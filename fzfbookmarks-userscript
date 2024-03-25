@@ -6,7 +6,11 @@
 
 # bmrkfile has to be the same than into qute-plugin-fzfbookmark
 bmrkfile="$QUTE_CONFIG_DIR/bookmarks/bookmarks"
-selectfile="/tmp/qute-plugins/qute-plugin-fzfbookmarks-selection"
+
+plgdir="/tmp/qute-plugins"
+[[ ! -d $plgdir ]] && mkdir "$plgdir"
+
+selectfile="$plgdir/qute-plugin-fzfbookmarks-selection"
 [[ -s $selectfile ]] && echo -n "" > $selectfile
 
 mode="$1"; shift
