@@ -25,21 +25,20 @@
 # DEPENDENCIES
 #     fzf
 #==================================================
+#==== CONFIG ======================================
+editor="nano"
 
-[[ -n $EDITOR ]] && editor=$EDITOR || editor="nano"
-
-#==== FILES =======================================
-bmrkfile="$QUTE_CONFIG_DIR/bookmarks/bookmarks"
-tmpfile="/tmp/qute-plugins/qute-plugin-fzfbookmarks-tmp"
-savefile="/tmp/qute-plugins/qute-plugin-fzfbookmarks-bookmarks-save"
-
-#==== FORMATTING ==================================
 sep="--"
 c1="\e[36m" # category color
 c2="\e[95m" # sub category color
 c3="\e[92m" # bookmark name color
 c4="\e[94m" # url color
 c5="\e[34m" # preview text
+
+#==== FILES =======================================
+bmrkfile="$QUTE_CONFIG_DIR/bookmarks/bookmarks"
+tmpfile="/tmp/qute-plugins/qute-plugin-fzfbookmarks-tmp"
+savefile="/tmp/qute-plugins/qute-plugin-fzfbookmarks-bookmarks-save"
 
 #==== FUNCTIONS ===================================
 # Open an fzf menu to select the category and add bookmark
